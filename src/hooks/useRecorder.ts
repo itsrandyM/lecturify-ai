@@ -89,6 +89,8 @@ export const useRecorder = () => {
     try {
       if (!userId) {
         toast({ title: 'Login required', description: 'Please sign in to record lectures.', variant: 'destructive' });
+        // Auto-redirect to auth page
+        window.location.href = '/auth';
         return;
       }
       const stream = await navigator.mediaDevices.getUserMedia({ 

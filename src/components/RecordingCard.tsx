@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Recording } from '@/hooks/useRecorder';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
 
 interface RecordingCardProps {
   recording: Recording;
@@ -22,7 +23,9 @@ export const RecordingCard = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(recording.name);
+  const [currentTime, setCurrentTime] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const navigate = useNavigate();
 
   const handlePlayPause = () => {
     if (audioRef.current) {
@@ -47,12 +50,22 @@ export const RecordingCard = ({
     setIsEditing(false);
   };
 
+  const handleCardClick = () => {
+    if (!isEditing) {
+      navigate(`/recording/${recording.id}`);
+    }
+  };
+
   return (
-    <Card className="p-4 bg-gradient-card shadow-soft hover:shadow-lg transition-all duration-300 animate-fade-in">
+    <Card 
+      className="p-4 bg-gradient-card shadow-soft hover:shadow-lg transition-all duration-300 animate-fade-in cursor-pointer group"
+      onClick={handleCardClick}
+    >
       <audio
         ref={audioRef}
         src={recording.audioUrl}
         onEnded={() => setIsPlaying(false)}
+        onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
         onLoadedMetadata={() => {
           // Auto-play functionality can be added here if needed
         }}
@@ -62,7 +75,10 @@ export const RecordingCard = ({
         <Button
           variant="ghost"
           size="sm"
-          onClick={handlePlayPause}
+          onClick={(e) => {
+            e.stopPropagation();
+            handlePlayPause();
+          }}
           className="h-10 w-10 rounded-full bg-primary/10 hover:bg-primary/20"
         >
           {isPlaying ? (
@@ -101,14 +117,19 @@ export const RecordingCard = ({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setIsEditing(true)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsEditing(true);
+                  }}
                   className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <Edit3 className="h-3 w-3" />
                 </Button>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span>{formatTime(recording.duration)}</span>
+                <span>
+                  {isPlaying ? `${formatTime(Math.floor(currentTime))}/${formatTime(recording.duration)}` : formatTime(recording.duration)}
+                </span>
                 <span>•</span>
                 <span>{recording.createdAt.toLocaleDateString()}</span>
                 <span>{recording.createdAt.toLocaleTimeString([], { 
@@ -123,7 +144,10 @@ export const RecordingCard = ({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onDelete(recording.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(recording.id);
+          }}
           className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
         >
           <Trash2 className="h-4 w-4" />
