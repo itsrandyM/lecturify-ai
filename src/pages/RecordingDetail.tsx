@@ -1,18 +1,25 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Pause, Download } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Download, Share2, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useRecorder } from '@/hooks/useRecorder';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSharing } from '@/hooks/useSharing';
 
 const RecordingDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { recordings, formatTime } = useRecorder();
   const { user } = useAuth();
+  const { generateShareLink, exportToMp3, isGeneratingLink, isExporting } = useSharing();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareExpiry, setShareExpiry] = useState('7');
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Redirect if not authenticated
@@ -34,7 +41,7 @@ const RecordingDetail = () => {
           </p>
           <Button onClick={() => navigate('/')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Recordings
+            Back to Lectures
           </Button>
         </Card>
       </div>
@@ -53,12 +60,16 @@ const RecordingDetail = () => {
   };
 
   const handleDownload = () => {
-    const link = document.createElement('a');
-    link.href = recording.audioUrl;
-    link.download = `${recording.name}.webm`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportToMp3(recording.audioBlob, recording.name);
+  };
+
+  const handleShare = async () => {
+    try {
+      await generateShareLink(recording.id, parseInt(shareExpiry));
+      setShareDialogOpen(false);
+    } catch (error) {
+      // Error handling is done in the hook
+    }
   };
 
   return (
@@ -72,7 +83,7 @@ const RecordingDetail = () => {
             className="flex items-center gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Recordings
+            Back to Lectures
           </Button>
         </div>
 
@@ -130,10 +141,54 @@ const RecordingDetail = () => {
 
             {/* Action Buttons */}
             <div className="flex gap-4">
-              <Button variant="outline" onClick={handleDownload}>
+              <Button variant="outline" onClick={handleDownload} disabled={isExporting}>
                 <Download className="h-4 w-4 mr-2" />
-                Download
+                {isExporting ? 'Exporting...' : 'Export Audio'}
               </Button>
+              
+              <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline">
+                    <Share2 className="h-4 w-4 mr-2" />
+                    Share
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Share Lecture</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="expiry">Link Expiry</Label>
+                      <Select value={shareExpiry} onValueChange={setShareExpiry}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 day</SelectItem>
+                          <SelectItem value="7">7 days</SelectItem>
+                          <SelectItem value="30">30 days</SelectItem>
+                          <SelectItem value="90">90 days</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="bg-muted p-4 rounded-lg">
+                      <p className="text-sm text-muted-foreground">
+                        Recipients will need to create an account to access the shared recording. 
+                        The link will expire after the selected time period.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handleShare} disabled={isGeneratingLink} className="flex-1">
+                        {isGeneratingLink ? 'Generating...' : 'Generate Share Link'}
+                      </Button>
+                      <Button variant="outline" onClick={() => setShareDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </Card>

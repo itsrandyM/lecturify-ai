@@ -88,7 +88,7 @@ export const RecordingsList = ({
     <div className="space-y-3">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold text-foreground">
-          My Recordings
+          My Lectures
         </h2>
         <div className="text-sm text-muted-foreground">
           {recordings.length} recording{recordings.length !== 1 ? 's' : ''}
