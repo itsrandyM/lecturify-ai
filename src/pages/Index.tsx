@@ -7,6 +7,7 @@ const Index = () => {
     isRecording,
     recordings,
     recordingTime,
+    isLoading,
     startRecording,
     stopRecording,
     deleteRecording,
@@ -42,6 +43,7 @@ const Index = () => {
         <div className="max-w-2xl mx-auto">
           <RecordingsList
             recordings={recordings}
+            isLoading={isLoading}
             onDelete={deleteRecording}
             onRename={renameRecording}
             formatTime={formatTime}

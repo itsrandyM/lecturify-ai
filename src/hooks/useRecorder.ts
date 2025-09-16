@@ -1,4 +1,6 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 export interface Recording {
   id: string;
@@ -13,11 +15,51 @@ export const useRecorder = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+
+  // Load recordings from Supabase on mount
+  useEffect(() => {
+    loadRecordings();
+  }, []);
+
+  const loadRecordings = async () => {
+    setIsLoading(true);
+    try {
+      const { data: recordingsData, error } = await supabase
+        .from('recordings')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Convert to local Recording format
+      const localRecordings: Recording[] = recordingsData?.map(record => ({
+        id: record.id,
+        name: record.title,
+        duration: record.duration,
+        createdAt: new Date(record.created_at),
+        audioBlob: new Blob(), // Will be loaded when needed
+        audioUrl: `https://oimcyxhalzbetmdvjgbm.supabase.co/storage/v1/object/public/recordings/${record.file_path}`,
+      })) || [];
+
+      setRecordings(localRecordings);
+    } catch (error) {
+      console.error('Error loading recordings:', error);
+      toast({
+        title: "Error loading recordings",
+        description: "Failed to load your recordings from the cloud.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const startRecording = useCallback(async () => {
     try {
@@ -43,20 +85,74 @@ export const useRecorder = () => {
         }
       };
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
         const audioUrl = URL.createObjectURL(audioBlob);
         
-        const newRecording: Recording = {
-          id: Date.now().toString(),
-          name: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
-          duration: recordingTime,
-          createdAt: new Date(),
-          audioBlob,
-          audioUrl,
-        };
+        // Save to Supabase
+        try {
+          const fileName = `recording_${Date.now()}.webm`;
+          const filePath = `${fileName}`;
+          
+          // Upload file to storage
+          const { error: uploadError } = await supabase.storage
+            .from('recordings')
+            .upload(filePath, audioBlob, {
+              contentType: 'audio/webm',
+            });
 
-        setRecordings(prev => [newRecording, ...prev]);
+          if (uploadError) throw uploadError;
+
+          // Save metadata to database
+          const { data: recordingData, error: dbError } = await supabase
+            .from('recordings')
+            .insert({
+              title: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
+              file_path: filePath,
+              duration: recordingTime,
+              file_size: audioBlob.size,
+              mime_type: 'audio/webm',
+              original_filename: fileName,
+            })
+            .select()
+            .single();
+
+          if (dbError) throw dbError;
+
+          const newRecording: Recording = {
+            id: recordingData.id,
+            name: recordingData.title,
+            duration: recordingTime,
+            createdAt: new Date(recordingData.created_at),
+            audioBlob,
+            audioUrl: `https://oimcyxhalzbetmdvjgbm.supabase.co/storage/v1/object/public/recordings/${filePath}`,
+          };
+
+          setRecordings(prev => [newRecording, ...prev]);
+          toast({
+            title: "Recording saved!",
+            description: "Your recording has been saved to the cloud.",
+          });
+        } catch (error) {
+          console.error('Error saving recording:', error);
+          toast({
+            title: "Error saving recording",
+            description: "Recording saved locally but failed to upload to cloud.",
+            variant: "destructive",
+          });
+          
+          // Still add to local state as fallback
+          const newRecording: Recording = {
+            id: Date.now().toString(),
+            name: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
+            duration: recordingTime,
+            createdAt: new Date(),
+            audioBlob,
+            audioUrl,
+          };
+          setRecordings(prev => [newRecording, ...prev]);
+        }
+        
         setRecordingTime(0);
       };
 
@@ -70,6 +166,11 @@ export const useRecorder = () => {
 
     } catch (error) {
       console.error('Error starting recording:', error);
+      toast({
+        title: "Recording failed",
+        description: "Please allow microphone access and try again.",
+        variant: "destructive",
+      });
     }
   }, [recordingTime]);
 
@@ -88,23 +189,67 @@ export const useRecorder = () => {
     }
   }, [isRecording]);
 
-  const deleteRecording = useCallback((id: string) => {
-    setRecordings(prev => {
-      const recordingToDelete = prev.find(r => r.id === id);
-      if (recordingToDelete) {
-        URL.revokeObjectURL(recordingToDelete.audioUrl);
-      }
-      return prev.filter(r => r.id !== id);
-    });
-  }, []);
+  const deleteRecording = useCallback(async (id: string) => {
+    try {
+      // Delete from Supabase
+      const { error } = await supabase
+        .from('recordings')
+        .delete()
+        .eq('id', id);
 
-  const renameRecording = useCallback((id: string, newName: string) => {
-    setRecordings(prev => 
-      prev.map(recording => 
-        recording.id === id ? { ...recording, name: newName } : recording
-      )
-    );
-  }, []);
+      if (error) throw error;
+
+      setRecordings(prev => {
+        const recordingToDelete = prev.find(r => r.id === id);
+        if (recordingToDelete) {
+          URL.revokeObjectURL(recordingToDelete.audioUrl);
+        }
+        return prev.filter(r => r.id !== id);
+      });
+
+      toast({
+        title: "Recording deleted",
+        description: "Your recording has been permanently deleted.",
+      });
+    } catch (error) {
+      console.error('Error deleting recording:', error);
+      toast({
+        title: "Error deleting recording",
+        description: "Failed to delete recording from cloud storage.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
+  const renameRecording = useCallback(async (id: string, newName: string) => {
+    try {
+      // Update in Supabase
+      const { error } = await supabase
+        .from('recordings')
+        .update({ title: newName })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setRecordings(prev => 
+        prev.map(recording => 
+          recording.id === id ? { ...recording, name: newName } : recording
+        )
+      );
+
+      toast({
+        title: "Recording renamed",
+        description: "Your recording has been successfully renamed.",
+      });
+    } catch (error) {
+      console.error('Error renaming recording:', error);
+      toast({
+        title: "Error renaming recording",
+        description: "Failed to rename recording. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
 
   const formatTime = useCallback((seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -116,10 +261,12 @@ export const useRecorder = () => {
     isRecording,
     recordings,
     recordingTime,
+    isLoading,
     startRecording,
     stopRecording,
     deleteRecording,
     renameRecording,
     formatTime,
+    loadRecordings,
   };
 };
