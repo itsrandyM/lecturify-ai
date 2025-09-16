@@ -47,6 +47,10 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        recording: {
+          DEFAULT: "hsl(var(--recording))",
+          foreground: "hsl(var(--recording-foreground))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -80,10 +84,41 @@ export default {
             height: "0",
           },
         },
+        "pulse-record": {
+          "0%, 100%": {
+            transform: "scale(1)",
+            boxShadow: "0 0 0 0 hsl(var(--recording) / 0.4)",
+          },
+          "50%": {
+            transform: "scale(1.05)",
+            boxShadow: "0 0 0 12px hsl(var(--recording) / 0)",
+          },
+        },
+        "fade-in": {
+          "0%": {
+            opacity: "0",
+            transform: "translateY(10px)",
+          },
+          "100%": {
+            opacity: "1",
+            transform: "translateY(0)",
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "pulse-record": "pulse-record 2s infinite",
+        "fade-in": "fade-in 0.3s ease-out",
+      },
+      backgroundImage: {
+        "gradient-bg": "var(--gradient-bg)",
+        "gradient-card": "var(--gradient-card)",
+        "gradient-primary": "var(--gradient-primary)",
+      },
+      boxShadow: {
+        "soft": "var(--shadow-soft)",
+        "record": "var(--shadow-record)",
       },
     },
   },

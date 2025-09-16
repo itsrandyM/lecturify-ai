@@ -1,11 +1,52 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useRecorder } from '@/hooks/useRecorder';
+import { RecordButton } from '@/components/RecordButton';
+import { RecordingsList } from '@/components/RecordingsList';
 
 const Index = () => {
+  const {
+    isRecording,
+    recordings,
+    recordingTime,
+    startRecording,
+    stopRecording,
+    deleteRecording,
+    renameRecording,
+    formatTime,
+  } = useRecorder();
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <div className="min-h-screen bg-gradient-bg">
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-4">
+            LectureAI Recorder
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Record, enhance, and organize your class lectures with AI
+          </p>
+        </div>
+
+        {/* Recording Section */}
+        <div className="flex justify-center mb-12">
+          <RecordButton
+            isRecording={isRecording}
+            onStart={startRecording}
+            onStop={stopRecording}
+            recordingTime={recordingTime}
+            formatTime={formatTime}
+          />
+        </div>
+
+        {/* Recordings List */}
+        <div className="max-w-2xl mx-auto">
+          <RecordingsList
+            recordings={recordings}
+            onDelete={deleteRecording}
+            onRename={renameRecording}
+            formatTime={formatTime}
+          />
+        </div>
       </div>
     </div>
   );
