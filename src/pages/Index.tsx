@@ -1,6 +1,9 @@
 import { useRecorder } from '@/hooks/useRecorder';
 import { RecordButton } from '@/components/RecordButton';
 import { RecordingsList } from '@/components/RecordingsList';
+import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
+import { Settings as SettingsIcon } from 'lucide-react';
 
 const Index = () => {
   const {
@@ -18,6 +21,14 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-bg">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
+        {/* Top bar */}
+        <div className="flex justify-end mb-4">
+          <Button variant="ghost" size="icon" asChild aria-label="Settings">
+            <Link to="/settings">
+              <SettingsIcon className="h-5 w-5" />
+            </Link>
+          </Button>
+        </div>
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-4">

@@ -30,7 +30,10 @@ export const useRecorder = () => {
       const uid = session?.user?.id ?? null;
       setUserId(uid);
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        loadRecordings();
+        // Defer Supabase calls to avoid doing them inside the auth callback
+        setTimeout(() => {
+          loadRecordings();
+        }, 0);
       }
       if (event === 'SIGNED_OUT') {
         setRecordings([]);
@@ -203,7 +206,7 @@ export const useRecorder = () => {
         variant: "destructive",
       });
     }
-  }, [recordingTime]);
+  }, [recordingTime, userId, toast]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
