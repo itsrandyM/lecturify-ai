@@ -16,6 +16,7 @@ export const useRecorder = () => {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [recordingTime, setRecordingTime] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const { toast } = useToast();
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -23,9 +24,23 @@ export const useRecorder = () => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  // Load recordings from Supabase on mount
+  // Auth state + initial load
   useEffect(() => {
-    loadRecordings();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const uid = session?.user?.id ?? null;
+      setUserId(uid);
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        loadRecordings();
+      }
+      if (event === 'SIGNED_OUT') {
+        setRecordings([]);
+      }
+    });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUserId(session?.user?.id ?? null);
+      if (session?.user) loadRecordings();
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   const loadRecordings = async () => {
@@ -38,15 +53,21 @@ export const useRecorder = () => {
 
       if (error) throw error;
 
-      // Convert to local Recording format
-      const localRecordings: Recording[] = recordingsData?.map(record => ({
-        id: record.id,
-        name: record.title,
-        duration: record.duration,
-        createdAt: new Date(record.created_at),
-        audioBlob: new Blob(), // Will be loaded when needed
-        audioUrl: `https://oimcyxhalzbetmdvjgbm.supabase.co/storage/v1/object/public/recordings/${record.file_path}`,
-      })) || [];
+      // Create signed URLs for private bucket
+      const localRecordings: Recording[] = await Promise.all((recordingsData ?? []).map(async (record: any) => {
+        const { data: signed, error: signedErr } = await supabase.storage
+          .from('recordings')
+          .createSignedUrl(record.file_path, 60 * 60); // 1 hour
+        if (signedErr) throw signedErr;
+        return {
+          id: record.id,
+          name: record.title,
+          duration: record.duration,
+          createdAt: new Date(record.created_at),
+          audioBlob: new Blob(),
+          audioUrl: signed.signedUrl,
+        } as Recording;
+      }));
 
       setRecordings(localRecordings);
     } catch (error) {
@@ -63,6 +84,10 @@ export const useRecorder = () => {
 
   const startRecording = useCallback(async () => {
     try {
+      if (!userId) {
+        toast({ title: 'Login required', description: 'Please sign in to record lectures.', variant: 'destructive' });
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -89,69 +114,75 @@ export const useRecorder = () => {
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
         const audioUrl = URL.createObjectURL(audioBlob);
         
-        // Save to Supabase
-        try {
-          const fileName = `recording_${Date.now()}.webm`;
-          const filePath = `${fileName}`;
-          
-          // Upload file to storage
-          const { error: uploadError } = await supabase.storage
-            .from('recordings')
-            .upload(filePath, audioBlob, {
-              contentType: 'audio/webm',
-            });
-
-          if (uploadError) throw uploadError;
-
-          // Save metadata to database
-          const { data: recordingData, error: dbError } = await supabase
-            .from('recordings')
-            .insert({
-              title: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
-              file_path: filePath,
-              duration: recordingTime,
-              file_size: audioBlob.size,
-              mime_type: 'audio/webm',
-              original_filename: fileName,
-            })
-            .select()
-            .single();
-
-          if (dbError) throw dbError;
-
-          const newRecording: Recording = {
-            id: recordingData.id,
-            name: recordingData.title,
-            duration: recordingTime,
-            createdAt: new Date(recordingData.created_at),
-            audioBlob,
-            audioUrl: `https://oimcyxhalzbetmdvjgbm.supabase.co/storage/v1/object/public/recordings/${filePath}`,
-          };
-
-          setRecordings(prev => [newRecording, ...prev]);
-          toast({
-            title: "Recording saved!",
-            description: "Your recording has been saved to the cloud.",
+      // Save to Supabase (private storage path per user)
+      try {
+        const fileName = `recording_${Date.now()}.webm`;
+        const filePath = `${userId}/${fileName}`;
+        
+        // Upload file to storage
+        const { error: uploadError } = await supabase.storage
+          .from('recordings')
+          .upload(filePath, audioBlob, {
+            contentType: 'audio/webm',
           });
-        } catch (error) {
-          console.error('Error saving recording:', error);
-          toast({
-            title: "Error saving recording",
-            description: "Recording saved locally but failed to upload to cloud.",
-            variant: "destructive",
-          });
-          
-          // Still add to local state as fallback
-          const newRecording: Recording = {
-            id: Date.now().toString(),
-            name: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
+
+        if (uploadError) throw uploadError;
+
+        // Save metadata to database
+        const { data: recordingData, error: dbError } = await supabase
+          .from('recordings')
+          .insert({
+            title: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
+            file_path: filePath,
             duration: recordingTime,
-            createdAt: new Date(),
-            audioBlob,
-            audioUrl,
-          };
-          setRecordings(prev => [newRecording, ...prev]);
-        }
+            file_size: audioBlob.size,
+            mime_type: 'audio/webm',
+            original_filename: fileName,
+            user_id: userId,
+          })
+          .select()
+          .maybeSingle();
+
+        if (dbError) throw dbError;
+        if (!recordingData) throw new Error('No recording returned after insert');
+
+        const { data: signed } = await supabase.storage
+          .from('recordings')
+          .createSignedUrl(filePath, 60 * 60);
+
+        const newRecording: Recording = {
+          id: recordingData.id,
+          name: recordingData.title,
+          duration: recordingTime,
+          createdAt: new Date(recordingData.created_at),
+          audioBlob,
+          audioUrl: signed?.signedUrl ?? audioUrl,
+        };
+
+        setRecordings(prev => [newRecording, ...prev]);
+        toast({
+          title: "Recording saved!",
+          description: "Your recording has been saved to the cloud.",
+        });
+      } catch (error) {
+        console.error('Error saving recording:', error);
+        toast({
+          title: "Error saving recording",
+          description: "Recording saved locally but failed to upload to cloud.",
+          variant: "destructive",
+        });
+        
+        // Still add to local state as fallback
+        const newRecording: Recording = {
+          id: Date.now().toString(),
+          name: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
+          duration: recordingTime,
+          createdAt: new Date(),
+          audioBlob,
+          audioUrl,
+        };
+        setRecordings(prev => [newRecording, ...prev]);
+      }
         
         setRecordingTime(0);
       };
@@ -191,12 +222,22 @@ export const useRecorder = () => {
 
   const deleteRecording = useCallback(async (id: string) => {
     try {
-      // Delete from Supabase
+      // Get file path then remove object and row
+      const { data: rec, error: fetchErr } = await supabase
+        .from('recordings')
+        .select('file_path')
+        .eq('id', id)
+        .maybeSingle();
+      if (fetchErr) throw fetchErr;
+
+      if (rec?.file_path) {
+        await supabase.storage.from('recordings').remove([rec.file_path]);
+      }
+
       const { error } = await supabase
         .from('recordings')
         .delete()
         .eq('id', id);
-
       if (error) throw error;
 
       setRecordings(prev => {
