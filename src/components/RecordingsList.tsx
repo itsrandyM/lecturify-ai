@@ -1,7 +1,7 @@
 import { RecordingCard } from './RecordingCard';
 import { Recording } from '@/hooks/useRecorder';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Mic, Music, AudioLines } from 'lucide-react';
+import { Mic, Music, AudioWaveform } from 'lucide-react';
 
 interface RecordingsListProps {
   recordings: Recording[];
@@ -53,7 +53,7 @@ export const RecordingsList = ({
             </div>
             <div className="absolute bottom-0 right-4 animate-bounce delay-500">
               <div className="w-7 h-7 rounded-full bg-secondary/50 flex items-center justify-center">
-                <AudioLines className="w-4 h-4 text-secondary-foreground/70" />
+                <AudioWaveform className="w-4 h-4 text-secondary-foreground/70" />
               </div>
             </div>
           </div>
