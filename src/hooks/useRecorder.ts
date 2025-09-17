@@ -119,7 +119,14 @@ export const useRecorder = () => {
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
         const audioUrl = URL.createObjectURL(audioBlob);
         
-      // Save to Supabase (private storage path per user)
+        // Calculate accurate duration from audio
+        const audio = new Audio(audioUrl);
+        await new Promise((resolve) => {
+          audio.addEventListener('loadedmetadata', resolve);
+        });
+        const actualDuration = Math.floor(audio.duration);
+        
+        // Save to Supabase (private storage path per user)
       try {
         const fileName = `recording_${Date.now()}.webm`;
         const filePath = `${userId}/${fileName}`;
@@ -139,7 +146,7 @@ export const useRecorder = () => {
           .insert({
             title: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
             file_path: filePath,
-            duration: recordingTime,
+            duration: actualDuration,
             file_size: audioBlob.size,
             mime_type: 'audio/webm',
             original_filename: fileName,

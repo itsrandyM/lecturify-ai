@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Pause, Download, Share2, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Download, Share2, ExternalLink, MessageCircle, Instagram } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useRecorder } from '@/hooks/useRecorder';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSharing } from '@/hooks/useSharing';
+import { useToast } from '@/hooks/use-toast';
 
 const RecordingDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -16,10 +17,13 @@ const RecordingDetail = () => {
   const { recordings, formatTime } = useRecorder();
   const { user } = useAuth();
   const { generateShareLink, exportToMp3, isGeneratingLink, isExporting } = useSharing();
+  const { toast } = useToast();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareExpiry, setShareExpiry] = useState('7');
+  const [exportFormat, setExportFormat] = useState<'webm' | 'mp3'>('mp3');
+  const [shareUrl, setShareUrl] = useState<string>('');
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Redirect if not authenticated
@@ -60,16 +64,31 @@ const RecordingDetail = () => {
   };
 
   const handleDownload = () => {
-    exportToMp3(recording.audioBlob, recording.name);
+    exportToMp3(recording.audioBlob, recording.name, exportFormat);
   };
 
   const handleShare = async () => {
     try {
-      await generateShareLink(recording.id, parseInt(shareExpiry));
-      setShareDialogOpen(false);
+      const result = await generateShareLink(recording.id, parseInt(shareExpiry));
+      setShareUrl(result.shareUrl);
     } catch (error) {
       // Error handling is done in the hook
     }
+  };
+
+  const handleWhatsAppShare = () => {
+    const message = `Check out this lecture recording: ${shareUrl}`;
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+  };
+
+  const handleInstagramShare = () => {
+    // Instagram doesn't support direct URL sharing, so copy to clipboard with instruction
+    navigator.clipboard.writeText(shareUrl);
+    toast({
+      title: "Link copied!",
+      description: "Share this link in your Instagram story or DM.",
+    });
   };
 
   return (
@@ -141,10 +160,38 @@ const RecordingDetail = () => {
 
             {/* Action Buttons */}
             <div className="flex gap-4">
-              <Button variant="outline" onClick={handleDownload} disabled={isExporting}>
-                <Download className="h-4 w-4 mr-2" />
-                {isExporting ? 'Exporting...' : 'Export Audio'}
-              </Button>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" disabled={isExporting}>
+                    <Download className="h-4 w-4 mr-2" />
+                    {isExporting ? 'Exporting...' : 'Export Audio'}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Export Audio</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="format">Export Format</Label>
+                      <Select value={exportFormat} onValueChange={(value: 'webm' | 'mp3') => setExportFormat(value)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="mp3">MP3 (Recommended)</SelectItem>
+                          <SelectItem value="webm">WebM (Original)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handleDownload} disabled={isExporting} className="flex-1">
+                        {isExporting ? 'Exporting...' : `Export as ${exportFormat.toUpperCase()}`}
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
               
               <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
                 <DialogTrigger asChild>
@@ -186,6 +233,34 @@ const RecordingDetail = () => {
                         Cancel
                       </Button>
                     </div>
+                    
+                    {shareUrl && (
+                      <div className="space-y-3 pt-4 border-t">
+                        <div className="bg-muted p-3 rounded-lg">
+                          <p className="text-sm font-mono break-all">{shareUrl}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleWhatsAppShare}
+                            className="flex-1"
+                          >
+                            <MessageCircle className="h-4 w-4 mr-2" />
+                            WhatsApp
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleInstagramShare}
+                            className="flex-1"
+                          >
+                            <Instagram className="h-4 w-4 mr-2" />
+                            Instagram
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </DialogContent>
               </Dialog>

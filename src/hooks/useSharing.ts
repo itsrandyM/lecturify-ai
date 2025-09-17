@@ -50,7 +50,7 @@ export const useSharing = () => {
         description: "Link copied to clipboard. Expires in " + expiryDays + " days.",
       });
 
-      return shareUrl;
+      return { shareUrl, token: data.link_token };
     } catch (error) {
       console.error('Error generating share link:', error);
       toast({
@@ -64,22 +64,59 @@ export const useSharing = () => {
     }
   }, [toast]);
 
-  const exportToMp3 = useCallback(async (audioBlob: Blob, filename: string) => {
+  const exportToMp3 = useCallback(async (audioBlob: Blob, filename: string, format: 'webm' | 'mp3' = 'webm') => {
     setIsExporting(true);
     try {
-      // Create download link for WebM file (browsers can play it as audio)
-      const url = URL.createObjectURL(audioBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${filename}.webm`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      if (format === 'mp3') {
+        // Convert WebM to MP3
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        
+        // Convert to WAV first, then to MP3 using lamejs
+        const { default: lamejs } = await import('lamejs');
+        const mp3encoder = new lamejs.Mp3Encoder(1, audioBuffer.sampleRate, 128);
+        const samples = audioBuffer.getChannelData(0);
+        const sampleBlockSize = 1152;
+        const mp3Data = [];
+        
+        for (let i = 0; i < samples.length; i += sampleBlockSize) {
+          const sampleChunk = samples.subarray(i, i + sampleBlockSize);
+          const mp3buf = mp3encoder.encodeBuffer(sampleChunk);
+          if (mp3buf.length > 0) {
+            mp3Data.push(mp3buf);
+          }
+        }
+        
+        const mp3buf = mp3encoder.flush();
+        if (mp3buf.length > 0) {
+          mp3Data.push(mp3buf);
+        }
+        
+        const mp3Blob = new Blob(mp3Data, { type: 'audio/mp3' });
+        const url = URL.createObjectURL(mp3Blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${filename}.mp3`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } else {
+        // Original WebM download
+        const url = URL.createObjectURL(audioBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${filename}.webm`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
 
       toast({
         title: "Export successful!",
-        description: "Audio file has been downloaded.",
+        description: `Audio file has been downloaded as ${format.toUpperCase()}.`,
       });
     } catch (error) {
       console.error('Error exporting audio:', error);
