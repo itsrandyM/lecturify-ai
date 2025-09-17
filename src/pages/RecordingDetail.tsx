@@ -37,6 +37,31 @@ const RecordingDetail = () => {
 
   const recording = recordings.find(r => r.id === id);
 
+  // Initialize accurate duration and file size
+  useEffect(() => {
+    if (!recording) return;
+    setTotalDuration(recording.duration || 0);
+    const size = (recording as any).fileSize ?? recording.audioBlob?.size ?? 0;
+    setFileSize(size);
+  }, [recording]);
+
+  // If file size is missing, try HEAD request to get content-length
+  useEffect(() => {
+    if (!recording) return;
+    const fetchSize = async () => {
+      try {
+        if (fileSize === 0 && recording.audioUrl) {
+          const res = await fetch(recording.audioUrl, { method: 'HEAD' });
+          const len = res.headers.get('content-length');
+          if (len) setFileSize(parseInt(len, 10));
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    fetchSize();
+  }, [fileSize, recording]);
+
   if (!recording) {
     return (
       <div className="min-h-screen bg-gradient-bg flex items-center justify-center">
@@ -54,28 +79,7 @@ const RecordingDetail = () => {
     );
   }
 
-  // Initialize accurate duration and file size
-  useEffect(() => {
-    setTotalDuration(recording.duration || 0);
-    const size = (recording as any).fileSize ?? recording.audioBlob?.size ?? 0;
-    setFileSize(size);
-  }, [recording]);
-
-  // If file size is missing, try HEAD request to get content-length
-  useEffect(() => {
-    const fetchSize = async () => {
-      try {
-        if (fileSize === 0 && recording.audioUrl) {
-          const res = await fetch(recording.audioUrl, { method: 'HEAD' });
-          const len = res.headers.get('content-length');
-          if (len) setFileSize(parseInt(len, 10));
-        }
-      } catch (e) {
-        // ignore
-      }
-    };
-    fetchSize();
-  }, [fileSize, recording.audioUrl]);
+  
 
   const handlePlayPause = () => {
     if (audioRef.current) {
