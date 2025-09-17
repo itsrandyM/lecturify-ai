@@ -24,6 +24,8 @@ const RecordingDetail = () => {
   const [shareExpiry, setShareExpiry] = useState('7');
   const [exportFormat, setExportFormat] = useState<'webm' | 'mp3'>('mp3');
   const [shareUrl, setShareUrl] = useState<string>('');
+  const [totalDuration, setTotalDuration] = useState<number>(0);
+  const [fileSize, setFileSize] = useState<number>(0);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Redirect if not authenticated
@@ -51,6 +53,29 @@ const RecordingDetail = () => {
       </div>
     );
   }
+
+  // Initialize accurate duration and file size
+  useEffect(() => {
+    setTotalDuration(recording.duration || 0);
+    const size = (recording as any).fileSize ?? recording.audioBlob?.size ?? 0;
+    setFileSize(size);
+  }, [recording]);
+
+  // If file size is missing, try HEAD request to get content-length
+  useEffect(() => {
+    const fetchSize = async () => {
+      try {
+        if (fileSize === 0 && recording.audioUrl) {
+          const res = await fetch(recording.audioUrl, { method: 'HEAD' });
+          const len = res.headers.get('content-length');
+          if (len) setFileSize(parseInt(len, 10));
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    fetchSize();
+  }, [fileSize, recording.audioUrl]);
 
   const handlePlayPause = () => {
     if (audioRef.current) {
@@ -126,6 +151,7 @@ const RecordingDetail = () => {
             src={recording.audioUrl}
             onEnded={() => setIsPlaying(false)}
             onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
+            onLoadedMetadata={() => setTotalDuration(Math.floor(audioRef.current?.duration || recording.duration || 0))}
             className="hidden"
           />
 
@@ -144,19 +170,19 @@ const RecordingDetail = () => {
             </Button>
 
             {/* Time Display */}
-            <div className="text-center">
-              <div className="text-2xl font-mono font-bold mb-2">
-                {formatTime(Math.floor(currentTime))} / {formatTime(recording.duration)}
+              <div className="text-center">
+                <div className="text-2xl font-mono font-bold mb-2">
+                  {formatTime(Math.floor(currentTime))} / {formatTime(totalDuration)}
+                </div>
+                <div className="w-80 bg-muted rounded-full h-2">
+                  <div 
+                    className="bg-primary h-2 rounded-full transition-all duration-100"
+                    style={{ 
+                      width: `${totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0}%` 
+                    }}
+                  />
+                </div>
               </div>
-              <div className="w-80 bg-muted rounded-full h-2">
-                <div 
-                  className="bg-primary h-2 rounded-full transition-all duration-100"
-                  style={{ 
-                    width: `${recording.duration > 0 ? (currentTime / recording.duration) * 100 : 0}%` 
-                  }}
-                />
-              </div>
-            </div>
 
             {/* Action Buttons */}
             <div className="flex gap-4">
@@ -272,13 +298,13 @@ const RecordingDetail = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
           <Card className="p-6">
             <h3 className="font-semibold mb-2">Duration</h3>
-            <p className="text-muted-foreground">{formatTime(recording.duration)}</p>
+            <p className="text-muted-foreground">{formatTime(totalDuration)}</p>
           </Card>
           
           <Card className="p-6">
             <h3 className="font-semibold mb-2">File Size</h3>
             <p className="text-muted-foreground">
-              {(recording.audioBlob.size / (1024 * 1024)).toFixed(2)} MB
+              {(fileSize / (1024 * 1024)).toFixed(2)} MB
             </p>
           </Card>
           
