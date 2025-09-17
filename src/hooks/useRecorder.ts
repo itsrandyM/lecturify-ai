@@ -120,14 +120,14 @@ export const useRecorder = () => {
         const audioUrl = URL.createObjectURL(audioBlob);
 
        try {
-        // Calculate duration and handle potential errors
-         const audio = new Audio(audioUrl);
-         await new Promise((resolve, reject) => {
-            audio.addEventListener('loadedmetadata', resolve);
-            audio.addEventListener('error', reject);
-        });
+        // // Calculate duration and handle potential errors
+        //  const audio = new Audio(audioUrl);
+        //  await new Promise((resolve, reject) => {
+        //     audio.addEventListener('loadedmetadata', resolve);
+        //     audio.addEventListener('error', reject);
+        // });
         
-        const actualDuration = Math.floor(audio.duration);
+        // const actualDuration = Math.floor(audio.duration);
 
         // --- Start of Supabase logic ---
         const fileName = `recording_${Date.now()}.webm`;
@@ -146,7 +146,7 @@ export const useRecorder = () => {
             .insert({
                 title: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
                 file_path: filePath,
-                duration: actualDuration,
+                duration: recordingTime,
                 file_size: audioBlob.size,
                 mime_type: 'audio/webm',
                 original_filename: fileName,
@@ -165,7 +165,7 @@ export const useRecorder = () => {
         const newRecording: Recording = {
             id: recordingData.id,
             name: recordingData.title,
-            duration: actualDuration,
+            duration: recordingData.duration,
             createdAt: new Date(recordingData.created_at),
             audioBlob,
             audioUrl: signed?.signedUrl ?? audioUrl,
