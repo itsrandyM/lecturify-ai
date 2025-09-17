@@ -118,90 +118,86 @@ export const useRecorder = () => {
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
         const audioUrl = URL.createObjectURL(audioBlob);
-
-       try {
-        // // Calculate duration and handle potential errors
-        //  const audio = new Audio(audioUrl);
-        //  await new Promise((resolve, reject) => {
-        //     audio.addEventListener('loadedmetadata', resolve);
-        //     audio.addEventListener('error', reject);
-        // });
         
-        // const actualDuration = Math.floor(audio.duration);
-
-        // --- Start of Supabase logic ---
+        // Calculate accurate duration from audio
+        const audio = new Audio(audioUrl);
+        await new Promise((resolve) => {
+          audio.addEventListener('loadedmetadata', resolve);
+        });
+        const actualDuration = Math.floor(audio.duration);
+        
+        // Save to Supabase (private storage path per user)
+      try {
         const fileName = `recording_${Date.now()}.webm`;
         const filePath = `${userId}/${fileName}`;
-
+        
+        // Upload file to storage
         const { error: uploadError } = await supabase.storage
-            .from('recordings')
-            .upload(filePath, audioBlob, {
-                contentType: 'audio/webm',
-            });
+          .from('recordings')
+          .upload(filePath, audioBlob, {
+            contentType: 'audio/webm',
+          });
 
         if (uploadError) throw uploadError;
 
+        // Save metadata to database
         const { data: recordingData, error: dbError } = await supabase
-            .from('recordings')
-            .insert({
-                title: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
-                file_path: filePath,
-                duration: recordingTime,
-                file_size: audioBlob.size,
-                mime_type: 'audio/webm',
-                original_filename: fileName,
-                user_id: userId,
-            })
-            .select()
-            .maybeSingle();
+          .from('recordings')
+          .insert({
+            title: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
+            file_path: filePath,
+            duration: actualDuration,
+            file_size: audioBlob.size,
+            mime_type: 'audio/webm',
+            original_filename: fileName,
+            user_id: userId,
+          })
+          .select()
+          .maybeSingle();
 
         if (dbError) throw dbError;
         if (!recordingData) throw new Error('No recording returned after insert');
 
         const { data: signed } = await supabase.storage
-            .from('recordings')
-            .createSignedUrl(filePath, 60 * 60);
+          .from('recordings')
+          .createSignedUrl(filePath, 60 * 60);
 
         const newRecording: Recording = {
-            id: recordingData.id,
-            name: recordingData.title,
-            duration: recordingData.duration,
-            createdAt: new Date(recordingData.created_at),
-            audioBlob,
-            audioUrl: signed?.signedUrl ?? audioUrl,
+          id: recordingData.id,
+          name: recordingData.title,
+          duration: actualDuration,
+          createdAt: new Date(recordingData.created_at),
+          audioBlob,
+          audioUrl: signed?.signedUrl ?? audioUrl,
         };
 
         setRecordings(prev => [newRecording, ...prev]);
-
         toast({
-            title: "Recording saved!",
-            description: "Your recording has been saved to the cloud.",
+          title: "Recording saved!",
+          description: "Your recording has been saved to the cloud.",
         });
-
-    } catch (error) {
+      } catch (error) {
         console.error('Error saving recording:', error);
         toast({
-            title: "Error saving recording",
-            description: "Failed to upload recording to cloud. Saved locally.",
-            variant: "destructive",
+          title: "Error saving recording",
+          description: "Recording saved locally but failed to upload to cloud.",
+          variant: "destructive",
         });
-
-        // Fallback for local storage
+        
+        // Still add to local state as fallback
         const newRecording: Recording = {
-            id: Date.now().toString(),
-            name: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
-            duration: recordingTime, // Use the UI timer as a fallback
-            createdAt: new Date(),
-            audioBlob,
-            audioUrl,
+          id: Date.now().toString(),
+          name: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
+          duration: actualDuration,
+          createdAt: new Date(),
+          audioBlob,
+          audioUrl,
         };
         setRecordings(prev => [newRecording, ...prev]);
-
-    } finally {
-        // This is the correct place to reset the timer
+      }
+        
         setRecordingTime(0);
-    }
-};
+      };
 
       mediaRecorder.start(1000);
       setIsRecording(true);
@@ -219,7 +215,7 @@ export const useRecorder = () => {
         variant: "destructive",
       });
     }
-  }, [userId, toast]);
+  }, [recordingTime, userId, toast]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
