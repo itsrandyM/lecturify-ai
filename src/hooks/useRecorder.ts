@@ -165,7 +165,7 @@ export const useRecorder = () => {
         const newRecording: Recording = {
           id: recordingData.id,
           name: recordingData.title,
-          duration: recordingTime,
+          duration: actualDuration,
           createdAt: new Date(recordingData.created_at),
           audioBlob,
           audioUrl: signed?.signedUrl ?? audioUrl,
@@ -188,7 +188,7 @@ export const useRecorder = () => {
         const newRecording: Recording = {
           id: Date.now().toString(),
           name: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
-          duration: recordingTime,
+          duration: actualDuration,
           createdAt: new Date(),
           audioBlob,
           audioUrl,

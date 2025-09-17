@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, Pause, Download, Share2, ExternalLink, MessageCircle, Instagram } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useRecorder } from '@/hooks/useRecorder';
@@ -200,6 +200,7 @@ const RecordingDetail = () => {
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Export Audio</DialogTitle>
+                    <DialogDescription>Select your preferred export format.</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
@@ -233,6 +234,7 @@ const RecordingDetail = () => {
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Share Lecture</DialogTitle>
+                    <DialogDescription>Generate a secure, expiring link to share.</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
