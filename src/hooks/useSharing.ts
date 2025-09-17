@@ -73,16 +73,26 @@ export const useSharing = () => {
         const arrayBuffer = await audioBlob.arrayBuffer();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         
-        // Convert to WAV first, then to MP3 using lamejs
+        // MP3 encoding using lamejs (convert Float32 -> Int16)
         const { default: lamejs } = await import('lamejs');
         const mp3encoder = new lamejs.Mp3Encoder(1, audioBuffer.sampleRate, 128);
         const samples = audioBuffer.getChannelData(0);
         const sampleBlockSize = 1152;
-        const mp3Data = [];
+        const mp3Data: Uint8Array[] = [];
+
+        const floatTo16BitPCM = (input: Float32Array) => {
+          const output = new Int16Array(input.length);
+          for (let i = 0; i < input.length; i++) {
+            let s = Math.max(-1, Math.min(1, input[i]));
+            output[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+          }
+          return output;
+        };
         
         for (let i = 0; i < samples.length; i += sampleBlockSize) {
           const sampleChunk = samples.subarray(i, i + sampleBlockSize);
-          const mp3buf = mp3encoder.encodeBuffer(sampleChunk);
+          const sampleChunk16 = floatTo16BitPCM(sampleChunk);
+          const mp3buf = mp3encoder.encodeBuffer(sampleChunk16);
           if (mp3buf.length > 0) {
             mp3Data.push(mp3buf);
           }
@@ -93,7 +103,7 @@ export const useSharing = () => {
           mp3Data.push(mp3buf);
         }
         
-        const mp3Blob = new Blob(mp3Data, { type: 'audio/mp3' });
+        const mp3Blob = new Blob(mp3Data, { type: 'audio/mpeg' });
         const url = URL.createObjectURL(mp3Blob);
         const link = document.createElement('a');
         link.href = url;
