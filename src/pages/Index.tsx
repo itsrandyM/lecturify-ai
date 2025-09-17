@@ -11,16 +11,19 @@ const Index = () => {
     recordings,
     recordingTime,
     isLoading,
+    units,
     startRecording,
     stopRecording,
     deleteRecording,
     renameRecording,
+    createUnit,
+    updateRecordingUnit,
     formatTime,
   } = useRecorder();
 
   return (
     <div className="min-h-screen bg-gradient-bg">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Top bar */}
         <div className="flex justify-end mb-4">
           <Button variant="ghost" size="icon" asChild aria-label="Settings">
@@ -51,12 +54,15 @@ const Index = () => {
         </div>
 
         {/* Recordings List */}
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-4xl mx-auto">
           <RecordingsList
             recordings={recordings}
             isLoading={isLoading}
+            units={units}
             onDelete={deleteRecording}
             onRename={renameRecording}
+            onCreateUnit={createUnit}
+            onUpdateRecordingUnit={updateRecordingUnit}
             formatTime={formatTime}
           />
         </div>

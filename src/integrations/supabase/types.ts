@@ -25,6 +25,7 @@ export type Database = {
           mime_type: string | null
           original_filename: string | null
           title: string
+          unit_id: string | null
           updated_at: string
           user_id: string | null
         }
@@ -38,6 +39,7 @@ export type Database = {
           mime_type?: string | null
           original_filename?: string | null
           title: string
+          unit_id?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -51,10 +53,19 @@ export type Database = {
           mime_type?: string | null
           original_filename?: string | null
           title?: string
+          unit_id?: string | null
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "recordings_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shared_links: {
         Row: {
@@ -172,6 +183,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      units: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {

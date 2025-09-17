@@ -9,6 +9,16 @@ export interface Recording {
   createdAt: Date;
   audioBlob: Blob;
   audioUrl: string;
+  unitId?: string;
+  unitName?: string;
+}
+
+export interface Unit {
+  id: string;
+  name: string;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export const useRecorder = () => {
@@ -17,6 +27,8 @@ export const useRecorder = () => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [recordingCount, setRecordingCount] = useState(0);
   const { toast } = useToast();
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -49,9 +61,29 @@ export const useRecorder = () => {
   const loadRecordings = async () => {
     setIsLoading(true);
     try {
+      // Load units first
+      const { data: unitsData, error: unitsError } = await supabase
+        .from('units')
+        .select('*')
+        .order('name');
+
+      if (unitsError) throw unitsError;
+
+      setUnits((unitsData ?? []).map(unit => ({
+        id: unit.id,
+        name: unit.name,
+        userId: unit.user_id,
+        createdAt: new Date(unit.created_at),
+        updatedAt: new Date(unit.updated_at),
+      })));
+
+      // Load recordings with unit information
       const { data: recordingsData, error } = await supabase
         .from('recordings')
-        .select('*')
+        .select(`
+          *,
+          units(id, name)
+        `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -69,6 +101,8 @@ export const useRecorder = () => {
           createdAt: new Date(record.created_at),
           audioBlob: new Blob(),
           audioUrl: signed.signedUrl,
+          unitId: record.unit_id,
+          unitName: record.units?.name,
         } as Recording;
       }));
 
@@ -119,17 +153,40 @@ export const useRecorder = () => {
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
         const audioUrl = URL.createObjectURL(audioBlob);
         
-        // Calculate accurate duration from audio
-        const audio = new Audio(audioUrl);
-        await new Promise((resolve) => {
-          audio.addEventListener('loadedmetadata', resolve);
-        });
-        const actualDuration = Math.floor(audio.duration);
+        // Use recordingTime from UI instead of calculating from audio
+        const recordingDuration = recordingTime;
         
         // Save to Supabase (private storage path per user)
       try {
         const fileName = `recording_${Date.now()}.webm`;
         const filePath = `${userId}/${fileName}`;
+        
+        // Get next lecture number for default unit
+        const currentCount = recordingCount + 1;
+        setRecordingCount(currentCount);
+        
+        // Create default unit if none exists
+        let defaultUnit = units.find(u => u.name === 'Unit 1');
+        if (!defaultUnit && units.length === 0) {
+          const { data: newUnit, error: unitError } = await supabase
+            .from('units')
+            .insert({
+              name: 'Unit 1',
+              user_id: userId,
+            })
+            .select()
+            .single();
+
+          if (unitError) throw unitError;
+          defaultUnit = {
+            id: newUnit.id,
+            name: newUnit.name,
+            userId: newUnit.user_id,
+            createdAt: new Date(newUnit.created_at),
+            updatedAt: new Date(newUnit.updated_at),
+          };
+          setUnits(prev => [...prev, defaultUnit!]);
+        }
         
         // Upload file to storage
         const { error: uploadError } = await supabase.storage
@@ -144,19 +201,19 @@ export const useRecorder = () => {
         const { data: recordingData, error: dbError } = await supabase
           .from('recordings')
           .insert({
-            title: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
+            title: `Lecture ${currentCount}`,
             file_path: filePath,
-            duration: actualDuration,
+            duration: recordingDuration,
             file_size: audioBlob.size,
             mime_type: 'audio/webm',
             original_filename: fileName,
             user_id: userId,
+            unit_id: defaultUnit?.id,
           })
           .select()
-          .maybeSingle();
+          .single();
 
         if (dbError) throw dbError;
-        if (!recordingData) throw new Error('No recording returned after insert');
 
         const { data: signed } = await supabase.storage
           .from('recordings')
@@ -165,10 +222,12 @@ export const useRecorder = () => {
         const newRecording: Recording = {
           id: recordingData.id,
           name: recordingData.title,
-          duration: actualDuration,
+          duration: recordingDuration,
           createdAt: new Date(recordingData.created_at),
           audioBlob,
           audioUrl: signed?.signedUrl ?? audioUrl,
+          unitId: recordingData.unit_id,
+          unitName: defaultUnit?.name,
         };
 
         setRecordings(prev => [newRecording, ...prev]);
@@ -187,8 +246,8 @@ export const useRecorder = () => {
         // Still add to local state as fallback
         const newRecording: Recording = {
           id: Date.now().toString(),
-          name: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
-          duration: actualDuration,
+          name: `Lecture ${recordingCount + 1}`,
+          duration: recordingDuration,
           createdAt: new Date(),
           audioBlob,
           audioUrl,
@@ -304,6 +363,76 @@ export const useRecorder = () => {
     }
   }, [toast]);
 
+  const createUnit = useCallback(async (name: string) => {
+    try {
+      const { data: newUnit, error } = await supabase
+        .from('units')
+        .insert({
+          name,
+          user_id: userId,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const unit = {
+        id: newUnit.id,
+        name: newUnit.name,
+        userId: newUnit.user_id,
+        createdAt: new Date(newUnit.created_at),
+        updatedAt: new Date(newUnit.updated_at),
+      };
+      setUnits(prev => [...prev, unit]);
+      toast({
+        title: "Unit created",
+        description: `"${name}" unit has been created.`,
+      });
+      return unit;
+    } catch (error) {
+      console.error('Error creating unit:', error);
+      toast({
+        title: "Error creating unit",
+        description: "Failed to create unit. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [userId, toast]);
+
+  const updateRecordingUnit = useCallback(async (recordingId: string, unitId: string) => {
+    try {
+      const { error } = await supabase
+        .from('recordings')
+        .update({ unit_id: unitId })
+        .eq('id', recordingId);
+
+      if (error) throw error;
+
+      const unit = units.find(u => u.id === unitId);
+      setRecordings(prev => 
+        prev.map(recording => 
+          recording.id === recordingId ? { 
+            ...recording, 
+            unitId,
+            unitName: unit?.name 
+          } : recording
+        )
+      );
+
+      toast({
+        title: "Recording updated",
+        description: "Recording has been moved to the selected unit.",
+      });
+    } catch (error) {
+      console.error('Error updating recording unit:', error);
+      toast({
+        title: "Error updating recording",
+        description: "Failed to update recording unit. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [units, toast]);
+
   const formatTime = useCallback((seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -315,10 +444,13 @@ export const useRecorder = () => {
     recordings,
     recordingTime,
     isLoading,
+    units,
     startRecording,
     stopRecording,
     deleteRecording,
     renameRecording,
+    createUnit,
+    updateRecordingUnit,
     formatTime,
     loadRecordings,
   };

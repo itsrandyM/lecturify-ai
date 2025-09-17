@@ -1,23 +1,45 @@
+import { useState } from 'react';
 import { RecordingCard } from './RecordingCard';
-import { Recording } from '@/hooks/useRecorder';
+import { UnitsFilter } from './UnitsFilter';
+import { Recording, Unit } from '@/hooks/useRecorder';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Mic, Music, AudioWaveform } from 'lucide-react';
 
 interface RecordingsListProps {
   recordings: Recording[];
   isLoading: boolean;
+  units: Unit[];
   onDelete: (id: string) => void;
   onRename: (id: string, newName: string) => void;
+  onCreateUnit: (name: string) => Promise<Unit | undefined>;
+  onUpdateRecordingUnit: (recordingId: string, unitId: string) => void;
   formatTime: (seconds: number) => string;
 }
 
 export const RecordingsList = ({ 
   recordings, 
   isLoading,
+  units,
   onDelete, 
-  onRename, 
+  onRename,
+  onCreateUnit,
+  onUpdateRecordingUnit,
   formatTime 
 }: RecordingsListProps) => {
+  const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
+
+  const filteredRecordings = selectedUnit 
+    ? recordings.filter(r => r.unitId === selectedUnit)
+    : recordings;
+
+  const groupedRecordings = filteredRecordings.reduce((acc, recording) => {
+    const unitName = recording.unitName || 'Unassigned';
+    if (!acc[unitName]) {
+      acc[unitName] = [];
+    }
+    acc[unitName].push(recording);
+    return acc;
+  }, {} as Record<string, Recording[]>);
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -85,8 +107,8 @@ export const RecordingsList = ({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between mb-4">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h2 className="text-xl font-semibold text-foreground">
           My Lectures
         </h2>
@@ -94,16 +116,34 @@ export const RecordingsList = ({
           {recordings.length} recording{recordings.length !== 1 ? 's' : ''}
         </div>
       </div>
+
+      <UnitsFilter
+        units={units}
+        selectedUnit={selectedUnit}
+        onUnitSelect={setSelectedUnit}
+        onCreateUnit={onCreateUnit}
+      />
       
-      <div className="space-y-3 group">
-        {recordings.map((recording) => (
-          <RecordingCard
-            key={recording.id}
-            recording={recording}
-            onDelete={onDelete}
-            onRename={onRename}
-            formatTime={formatTime}
-          />
+      <div className="space-y-6">
+        {Object.entries(groupedRecordings).map(([unitName, unitRecordings]) => (
+          <div key={unitName} className="space-y-3">
+            <h3 className="text-lg font-medium text-foreground border-b pb-2">
+              {unitName}
+            </h3>
+            <div className="space-y-3 group pl-4">
+              {unitRecordings.map((recording) => (
+                <RecordingCard
+                  key={recording.id}
+                  recording={recording}
+                  units={units}
+                  onDelete={onDelete}
+                  onRename={onRename}
+                  onUpdateUnit={onUpdateRecordingUnit}
+                  formatTime={formatTime}
+                />
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     </div>
