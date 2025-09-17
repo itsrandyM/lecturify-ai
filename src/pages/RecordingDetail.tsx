@@ -40,7 +40,8 @@ const RecordingDetail = () => {
   // Initialize accurate duration and file size
   useEffect(() => {
     if (!recording) return;
-    setTotalDuration(recording.duration || 0);
+    const duration = Number.isFinite(recording.duration) ? recording.duration : 0;
+    setTotalDuration(duration);
     const size = (recording as any).fileSize ?? recording.audioBlob?.size ?? 0;
     setFileSize(size);
   }, [recording]);
