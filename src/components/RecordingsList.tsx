@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { RecordingCard } from './RecordingCard';
 import { UnitsFilter } from './UnitsFilter';
 import { Recording, Unit } from '@/hooks/useRecorder';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LoadingState, LoadingCard } from '@/components/ui/loading-spinner';
 import { Mic, Music, AudioWaveform } from 'lucide-react';
 
 interface RecordingsListProps {
@@ -42,14 +42,13 @@ export const RecordingsList = ({
   }, {} as Record<string, Recording[]>);
   if (isLoading) {
     return (
-      <div className="space-y-3">
-        <div className="flex items-center justify-between mb-4">
-          <Skeleton className="h-7 w-32" />
-          <Skeleton className="h-5 w-24" />
+      <div className="space-y-6">
+        <div className="h-10 bg-muted/50 rounded animate-pulse" />
+        <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <LoadingCard key={i}>Loading recordings...</LoadingCard>
+          ))}
         </div>
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-20 w-full rounded-lg" />
-        ))}
       </div>
     );
   }

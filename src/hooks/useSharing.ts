@@ -68,44 +68,30 @@ export const useSharing = () => {
     setIsExporting(true);
     try {
       if (format === 'mp3') {
-        // Simple approach: convert to WAV first, then use lamejs for MP3
-        const arrayBuffer = await audioBlob.arrayBuffer();
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        // Use FFmpeg.wasm for conversion
+        const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+        const { fetchFile, toBlobURL } = await import('@ffmpeg/util');
         
-        // Get audio data
-        const samples = audioBuffer.getChannelData(0);
-        const sampleRate = audioBuffer.sampleRate;
+        const ffmpeg = new FFmpeg();
         
-        // Convert to 16-bit PCM
-        const int16Array = new Int16Array(samples.length);
-        for (let i = 0; i < samples.length; i++) {
-          const sample = Math.max(-1, Math.min(1, samples[i]));
-          int16Array[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-        }
+        // Load FFmpeg
+        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        });
         
-        // Use lamejs to encode MP3
-        const { default: lamejs } = await import('lamejs');
-        const mp3encoder = new lamejs.Mp3Encoder(1, sampleRate, 128);
-        const mp3Data: Uint8Array[] = [];
+        // Write input file
+        await ffmpeg.writeFile('input.webm', await fetchFile(audioBlob));
         
-        const blockSize = 1152;
-        for (let i = 0; i < int16Array.length; i += blockSize) {
-          const chunk = int16Array.subarray(i, i + blockSize);
-          const mp3buf = mp3encoder.encodeBuffer(chunk);
-          if (mp3buf.length > 0) {
-            mp3Data.push(mp3buf);
-          }
-        }
+        // Convert to MP3
+        await ffmpeg.exec(['-i', 'input.webm', '-codec:a', 'libmp3lame', '-b:a', '128k', 'output.mp3']);
         
-        // Flush remaining data
-        const finalBuffer = mp3encoder.flush();
-        if (finalBuffer.length > 0) {
-          mp3Data.push(finalBuffer);
-        }
+        // Read output file
+        const data = await ffmpeg.readFile('output.mp3');
+        const mp3Blob = new Blob([data], { type: 'audio/mpeg' });
         
-        // Create and download MP3 blob
-        const mp3Blob = new Blob(mp3Data, { type: 'audio/mpeg' });
+        // Download file
         const url = URL.createObjectURL(mp3Blob);
         const link = document.createElement('a');
         link.href = url;
@@ -116,7 +102,7 @@ export const useSharing = () => {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
       } else {
-        // Download original format
+        // Download original webm format
         const url = URL.createObjectURL(audioBlob);
         const link = document.createElement('a');
         link.href = url;
