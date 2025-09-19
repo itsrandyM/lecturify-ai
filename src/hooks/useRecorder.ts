@@ -150,16 +150,10 @@ export const useRecorder = () => {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
-        const audioUrl = URL.createObjectURL(audioBlob);
+        const webmBlob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
         
         // Use recordingTime from UI instead of calculating from audio
         const recordingDuration = recordingTime;
-        
-        // Save to Supabase (private storage path per user)
-      try {
-        const fileName = `recording_${Date.now()}.webm`;
-        const filePath = `${userId}/${fileName}`;
         
         // Get next lecture number for default unit
         const currentCount = recordingCount + 1;
@@ -187,31 +181,71 @@ export const useRecorder = () => {
           };
           setUnits(prev => [...prev, defaultUnit!]);
         }
-        
-        // Upload file to storage
-        const { error: uploadError } = await supabase.storage
-          .from('recordings')
-          .upload(filePath, audioBlob, {
-            contentType: 'audio/webm',
+
+        // Try to convert to MP3, fallback to WebM
+        let finalBlob = webmBlob;
+        let fileName = `recording_${Date.now()}.webm`;
+        let contentType = 'audio/webm';
+        let mimeType = 'audio/webm';
+
+        try {
+          // Convert to MP3 using FFmpeg
+          const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+          const { fetchFile, toBlobURL } = await import('@ffmpeg/util');
+          
+          const ffmpeg = new FFmpeg();
+          
+          // Load FFmpeg
+          const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+          await ffmpeg.load({
+            coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+            wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
           });
+          
+          // Convert WebM to MP3
+          await ffmpeg.writeFile('input.webm', await fetchFile(webmBlob));
+          await ffmpeg.exec(['-i', 'input.webm', '-codec:a', 'libmp3lame', '-b:a', '128k', 'output.mp3']);
+          
+          const mp3Data = await ffmpeg.readFile('output.mp3');
+          finalBlob = new Blob([mp3Data], { type: 'audio/mpeg' });
+          fileName = `recording_${Date.now()}.mp3`;
+          contentType = 'audio/mpeg';
+          mimeType = 'audio/mpeg';
+          
+          console.log('Successfully converted to MP3');
+        } catch (error) {
+          console.warn('MP3 conversion failed, using WebM fallback:', error);
+          // Keep WebM as fallback
+        }
 
-        if (uploadError) throw uploadError;
+        // Save to Supabase (private storage path per user)
+        try {
+          const filePath = `${userId}/${fileName}`;
+          
+          // Upload file to storage
+          const { error: uploadError } = await supabase.storage
+            .from('recordings')
+            .upload(filePath, finalBlob, {
+              contentType,
+            });
 
-        // Save metadata to database
-        const { data: recordingData, error: dbError } = await supabase
-          .from('recordings')
-          .insert({
-            title: `Lecture ${currentCount}`,
-            file_path: filePath,
-            duration: recordingDuration,
-            file_size: audioBlob.size,
-            mime_type: 'audio/mpeg',
-            original_filename: fileName,
-            user_id: userId,
-            unit_id: defaultUnit?.id,
-          })
-          .select()
-          .single();
+          if (uploadError) throw uploadError;
+
+          // Save metadata to database
+          const { data: recordingData, error: dbError } = await supabase
+            .from('recordings')
+            .insert({
+              title: `Lecture ${currentCount}`,
+              file_path: filePath,
+              duration: recordingDuration,
+              file_size: finalBlob.size,
+              mime_type: mimeType,
+              original_filename: fileName,
+              user_id: userId,
+              unit_id: defaultUnit?.id,
+            })
+            .select()
+            .single();
 
         if (dbError) throw dbError;
 
@@ -224,8 +258,8 @@ export const useRecorder = () => {
           name: recordingData.title,
           duration: recordingDuration,
           createdAt: new Date(recordingData.created_at),
-          audioBlob,
-          audioUrl: signed?.signedUrl ?? audioUrl,
+          audioBlob: finalBlob,
+          audioUrl: signed?.signedUrl ?? URL.createObjectURL(finalBlob),
           unitId: recordingData.unit_id,
           unitName: defaultUnit?.name,
         };
@@ -244,13 +278,14 @@ export const useRecorder = () => {
         });
         
         // Still add to local state as fallback
+        const fallbackUrl = URL.createObjectURL(finalBlob || webmBlob);
         const newRecording: Recording = {
           id: Date.now().toString(),
           name: `Lecture ${recordingCount + 1}`,
           duration: recordingDuration,
           createdAt: new Date(),
-          audioBlob,
-          audioUrl,
+          audioBlob: finalBlob || webmBlob,
+          audioUrl: fallbackUrl,
         };
         setRecordings(prev => [newRecording, ...prev]);
       }
