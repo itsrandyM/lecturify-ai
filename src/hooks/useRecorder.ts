@@ -205,7 +205,7 @@ export const useRecorder = () => {
             file_path: filePath,
             duration: recordingDuration,
             file_size: audioBlob.size,
-            mime_type: 'audio/webm',
+            mime_type: 'audio/mpeg',
             original_filename: fileName,
             user_id: userId,
             unit_id: defaultUnit?.id,
