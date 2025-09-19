@@ -68,56 +68,60 @@ export const useSharing = () => {
     setIsExporting(true);
     try {
       if (format === 'mp3') {
-        // Convert WebM to MP3
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        // Simple approach: convert to WAV first, then use lamejs for MP3
         const arrayBuffer = await audioBlob.arrayBuffer();
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         
-        // MP3 encoding using lamejs (convert Float32 -> Int16)
-        const { default: lamejs } = await import('lamejs');
-        const mp3encoder = new lamejs.Mp3Encoder(1, audioBuffer.sampleRate, 128);
+        // Get audio data
         const samples = audioBuffer.getChannelData(0);
-        const sampleBlockSize = 1152;
-        const mp3Data: Uint8Array[] = [];
-
-        const floatTo16BitPCM = (input: Float32Array) => {
-          const output = new Int16Array(input.length);
-          for (let i = 0; i < input.length; i++) {
-            let s = Math.max(-1, Math.min(1, input[i]));
-            output[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-          }
-          return output;
-        };
+        const sampleRate = audioBuffer.sampleRate;
         
-        for (let i = 0; i < samples.length; i += sampleBlockSize) {
-          const sampleChunk = samples.subarray(i, i + sampleBlockSize);
-          const sampleChunk16 = floatTo16BitPCM(sampleChunk);
-          const mp3buf = mp3encoder.encodeBuffer(sampleChunk16);
+        // Convert to 16-bit PCM
+        const int16Array = new Int16Array(samples.length);
+        for (let i = 0; i < samples.length; i++) {
+          const sample = Math.max(-1, Math.min(1, samples[i]));
+          int16Array[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+        }
+        
+        // Use lamejs to encode MP3
+        const { default: lamejs } = await import('lamejs');
+        const mp3encoder = new lamejs.Mp3Encoder(1, sampleRate, 128);
+        const mp3Data: Uint8Array[] = [];
+        
+        const blockSize = 1152;
+        for (let i = 0; i < int16Array.length; i += blockSize) {
+          const chunk = int16Array.subarray(i, i + blockSize);
+          const mp3buf = mp3encoder.encodeBuffer(chunk);
           if (mp3buf.length > 0) {
             mp3Data.push(mp3buf);
           }
         }
         
-        const mp3buf = mp3encoder.flush();
-        if (mp3buf.length > 0) {
-          mp3Data.push(mp3buf);
+        // Flush remaining data
+        const finalBuffer = mp3encoder.flush();
+        if (finalBuffer.length > 0) {
+          mp3Data.push(finalBuffer);
         }
         
+        // Create and download MP3 blob
         const mp3Blob = new Blob(mp3Data, { type: 'audio/mpeg' });
         const url = URL.createObjectURL(mp3Blob);
         const link = document.createElement('a');
         link.href = url;
         link.download = `${filename}.mp3`;
+        link.style.display = 'none';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
       } else {
-        // Original WebM download
+        // Download original format
         const url = URL.createObjectURL(audioBlob);
         const link = document.createElement('a');
         link.href = url;
         link.download = `${filename}.webm`;
+        link.style.display = 'none';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

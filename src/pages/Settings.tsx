@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,6 +60,14 @@ const Settings = () => {
     <div className="min-h-screen bg-gradient-bg">
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         <header className="mb-8">
+          <Button
+            variant="ghost"
+            onClick={() => navigate(-1)}
+            className="mb-4 p-2 h-auto"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
           <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">Account Settings</h1>
           <p className="text-muted-foreground">Manage your account and security preferences.</p>
         </header>
