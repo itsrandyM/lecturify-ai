@@ -43,10 +43,37 @@ export const RecordingsList = ({
   if (isLoading) {
     return (
       <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="h-7 w-32 bg-muted/50 rounded animate-pulse" />
+          <div className="h-5 w-24 bg-muted/50 rounded animate-pulse" />
+        </div>
+        
         <div className="h-10 bg-muted/50 rounded animate-pulse" />
-        <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {[...Array(3)].map((_, i) => (
-            <LoadingCard key={i}>Loading recordings...</LoadingCard>
+        
+        <div className="space-y-6">
+          {[...Array(2)].map((_, unitIndex) => (
+            <div key={unitIndex} className="space-y-3">
+              <div className="h-6 w-40 bg-muted/50 rounded animate-pulse border-b pb-2" />
+              <div className="space-y-3 pl-4">
+                {[...Array(2)].map((_, recIndex) => (
+                  <div key={recIndex} className="bg-gradient-card rounded-lg p-4 animate-pulse">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 bg-muted/50 rounded-full" />
+                        <div className="space-y-2">
+                          <div className="h-4 w-32 bg-muted/50 rounded" />
+                          <div className="h-3 w-24 bg-muted/50 rounded" />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-16 bg-muted/50 rounded" />
+                        <div className="h-8 w-8 bg-muted/50 rounded" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       </div>

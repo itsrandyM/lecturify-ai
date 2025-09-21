@@ -10,11 +10,12 @@ import { useRecorder } from '@/hooks/useRecorder';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSharing } from '@/hooks/useSharing';
 import { useToast } from '@/hooks/use-toast';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
 const RecordingDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { recordings, formatTime } = useRecorder();
+  const { recordings, formatTime, isLoading } = useRecorder();
   const { user } = useAuth();
   const { generateShareLink, exportToMp3, isGeneratingLink, isExporting } = useSharing();
   const { toast } = useToast();
@@ -63,6 +64,55 @@ const RecordingDetail = () => {
     fetchSize();
   }, [fileSize, recording]);
 
+  // Show loading state while data is being fetched
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-bg">
+        <div className="container mx-auto px-4 py-8 max-w-4xl">
+          {/* Header skeleton */}
+          <div className="flex items-center gap-4 mb-8">
+            <div className="h-9 w-32 bg-muted/50 rounded animate-pulse" />
+          </div>
+
+          {/* Recording Player skeleton */}
+          <Card className="p-8 bg-gradient-card shadow-soft">
+            <div className="text-center mb-8">
+              <div className="h-9 w-64 bg-muted/50 rounded animate-pulse mx-auto mb-2" />
+              <div className="h-5 w-48 bg-muted/50 rounded animate-pulse mx-auto" />
+            </div>
+
+            <div className="flex flex-col items-center gap-6">
+              <div className="h-16 w-16 rounded-full bg-muted/50 animate-pulse" />
+              
+              <div className="text-center">
+                <div className="h-8 w-32 bg-muted/50 rounded animate-pulse mx-auto mb-2" />
+                <div className="w-80 bg-muted rounded-full h-2">
+                  <div className="bg-muted/50 h-2 rounded-full w-0" />
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <div className="h-10 w-32 bg-muted/50 rounded animate-pulse" />
+                <div className="h-10 w-24 bg-muted/50 rounded animate-pulse" />
+              </div>
+            </div>
+          </Card>
+
+          {/* Recording Details skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+            {[...Array(3)].map((_, i) => (
+              <Card key={i} className="p-6">
+                <div className="h-5 w-16 bg-muted/50 rounded animate-pulse mb-2" />
+                <div className="h-4 w-20 bg-muted/50 rounded animate-pulse" />
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show not found only when loading is complete and recording doesn't exist
   if (!recording) {
     return (
       <div className="min-h-screen bg-gradient-bg flex items-center justify-center">
