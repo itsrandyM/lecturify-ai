@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSharing } from '@/hooks/useSharing';
 import { useToast } from '@/hooks/use-toast';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { useSummary } from '@/hooks/useSummary';
 
 const RecordingDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -18,6 +19,7 @@ const RecordingDetail = () => {
   const { recordings, formatTime, isLoading } = useRecorder();
   const { user } = useAuth();
   const { generateShareLink, exportToMp3, isGeneratingLink, isExporting } = useSharing();
+  const { generateSummary, getSummaryByTranscriptId, getTranscriptByRecordingId, isGenerating } = useSummary();
   const { toast } = useToast();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -27,6 +29,8 @@ const RecordingDetail = () => {
   const [shareUrl, setShareUrl] = useState<string>('');
   const [totalDuration, setTotalDuration] = useState<number>(0);
   const [fileSize, setFileSize] = useState<number>(0);
+  const [transcript, setTranscript] = useState<any>(null);
+  const [summary, setSummary] = useState<any>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Redirect if not authenticated
@@ -42,10 +46,27 @@ const RecordingDetail = () => {
   useEffect(() => {
     if (!recording) return;
     const duration = Number.isFinite(recording.duration) ? recording.duration : 0;
-    setTotalDuration(duration);
+    setTotalDuration(duration);
     const size = (recording as any).fileSize ?? recording.audioBlob?.size ?? 0;
     setFileSize(size);
   }, [recording]);
+
+  // Load transcript and summary data
+  useEffect(() => {
+    if (!recording) return;
+    
+    const loadTranscriptAndSummary = async () => {
+      const transcriptData = await getTranscriptByRecordingId(recording.id);
+      setTranscript(transcriptData);
+      
+      if (transcriptData) {
+        const summaryData = await getSummaryByTranscriptId(transcriptData.id);
+        setSummary(summaryData);
+      }
+    };
+    
+    loadTranscriptAndSummary();
+  }, [recording, getTranscriptByRecordingId, getSummaryByTranscriptId]);
 
   // If file size is missing, try HEAD request to get content-length
   useEffect(() => {
@@ -169,6 +190,22 @@ const RecordingDetail = () => {
       title: "Link copied!",
       description: "Share this link in your Instagram story or DM.",
     });
+  };
+
+  const handleGenerateSummary = async () => {
+    if (!transcript) {
+      toast({
+        title: "No Transcript",
+        description: "This recording needs to be transcribed first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newSummary = await generateSummary(transcript.id);
+    if (newSummary) {
+      setSummary(newSummary);
+    }
   };
 
   return (
@@ -350,6 +387,62 @@ const RecordingDetail = () => {
             </div>
           </div>
         </Card>
+
+        {/* Summary Section */}
+        {transcript && (
+          <Card className="p-6 mt-8">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold">Summary</h3>
+              {!summary && (
+                <Button 
+                  onClick={handleGenerateSummary} 
+                  disabled={isGenerating}
+                  className="flex items-center gap-2"
+                >
+                  {isGenerating ? (
+                    <>
+                      <LoadingSpinner size="sm" />
+                      Generating...
+                    </>
+                  ) : (
+                    'Generate Summary'
+                  )}
+                </Button>
+              )}
+            </div>
+            
+            {summary ? (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-medium mb-2">Overview</h4>
+                  <p className="text-muted-foreground leading-relaxed">{summary.content}</p>
+                </div>
+                
+                {summary.bullet_points && summary.bullet_points.length > 0 && (
+                  <div>
+                    <h4 className="font-medium mb-2">Key Points</h4>
+                    <ul className="space-y-1">
+                      {summary.bullet_points.map((point: string, index: number) => (
+                        <li key={index} className="text-muted-foreground flex items-start gap-2">
+                          <span className="text-primary mt-1.5">•</span>
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                
+                <div className="text-sm text-muted-foreground border-t pt-4">
+                  Summary generated on {new Date(summary.created_at).toLocaleDateString()} • {summary.word_count} words
+                </div>
+              </div>
+            ) : !isGenerating && (
+              <p className="text-muted-foreground">
+                Generate an AI-powered summary to get key insights and main points from this recording.
+              </p>
+            )}
+          </Card>
+        )}
 
         {/* Recording Details */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
